@@ -1,0 +1,6 @@
+2018-07-01 11:01:36.205 EDT [61309] LOG:  listening on IPv6 address "::1", port 5432
+2018-07-01 11:01:36.205 EDT [61309] LOG:  listening on IPv4 address "127.0.0.1", port 5432
+2018-07-01 11:01:36.206 EDT [61309] LOG:  listening on Unix socket "/tmp/.s.PGSQL.5432"
+2018-07-01 11:01:36.219 EDT [61310] LOG:  database system was shut down at 2018-07-01 11:01:11 EDT
+2018-07-01 11:01:36.223 EDT [61309] LOG:  database system is ready to accept connections
+2018-07-01 21:44:54.640 EDT [63569] FATAL:  database "airflow" does not exist

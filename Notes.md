@@ -87,8 +87,23 @@ default_args = {
   
 ### Setting up a backend
 
-* TODO
+* The default SQLite backend has rate limitations and should not be used in production.
+* Instead you should use any of the supported databases. All databases supposed by SQLAlchemy work (that's most of them).
+* Here's a sequence of commands for getting a Postgres backing store up and running:
 
+```bash
+mkdir ~/postgres
+pg_ctl -D /Users/alex/postgres -l logfile start
+createdb airflow
+airflow initdb
+```
+
+* You then need to change the following two config lines in `airflow.cfg`:
+
+```bash
+executor = LocalExecutor     
+sql_alchemy_conn = postgresql+psycopg2://localhost/airflow
+```
 
 ### Data profiling
 * Still need to figure this out.
