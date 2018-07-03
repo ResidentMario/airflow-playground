@@ -105,11 +105,73 @@ executor = LocalExecutor
 sql_alchemy_conn = postgresql+psycopg2://localhost/airflow
 ```
 
+### Concepts
+* DAG operators must be scoped at the top of the file. They cannot be hidden within closures, e.g. functions.
+* DAG default arguments get passed to operators. You can further modify operators at their definition. 
+* Some things make more sense in the context of the whole DAG, others only in the operator. Some could live in either place.
+* An operator may be instantiated with run-time **variables**.
+* Variables have global scope to all running tasks. They may be defined and manipulated using any of the CLI, code calls, and the UI.
+* They're basically a shared key-value store used for configuration variables.
+* An instantiated operator is a **task**.
+* A **task instance** is a specific run of a task. Since tasks occur within the frame of DAGs, task instances may be defined as a tuple of {DAG, Task, Timestamp}.
+* A task itself is an {Operator, Instance Variables} tuple.
+* **Pools** may be used to limit parallelism.
+  * Pools are a {name, number of worker slots} concept.
+  * If the amount of jobs submitted to a pool exceeds the number of slots in the pool, a priority queue will be formed.
+  * The priority of a task instance is the sum of its priority and that of all downstream tasks.
+  * You can manage pools via `Menu -> Admin -> Pools`.
+* **Hooks** define connections to external systems like e.g. Apache Pig. They abstract authentication information and similar concerns out of the pipelines.
+  * Hooks are a low-level concept that is used to build operators, the corresponding higher-level object.
+  * **Connections** define all of the metadata necessary for a specific connecting system.
+  * Connection information is stored in the Airflow metadata database and may be managed via the UI.  
+  * Hooks define a `get_connection` method. Operators use hooks to link to external resources using this method.
+  * Every connection has a `conn_id`. Multiple connections having the same `conn_id` may be defined.
+  * In the presence of multiple connections with the same `conn_id`, a hook will randomly choose one connection as its target. This allows rudimentary load balancing.
+  * In addition to management within Airflow, you can manage connection IDs using OS variables.
+  * An OS variable `AIRFLOW_CONN_POSTGRES_MASTER` will define a connection variable `postgres_master` within Airflow.
+  * Pers note: I immediately gravitate towards using OS variables for managing this metadata! It makes more sense in a container context. Style decision.
+* Queues : TODO
+* XComs
+  * XComs are a intertask data sharing scheme.
+  * They use Pickle serialization.
+  * Avoid using until absolutely necessary! Tasks should be atomic and self-contained as much as possible.
+* Branching paths (execute this, not that) are possible using a `BranchPythonOperator`. This is a "magic" operator that is supposed to return the `task_id` that is next to be run.
+* SubDAGs can be implemented, if you need reusable components in your graph.
+  * A common pattern for sub-DAGs is to have them scoped to a function. This prevents their being populated as their own separate DAG in the interface.
+  * SubDAGs follow what AirBnB calls the "stage-check-exchange pattern": they are built in a test area, checked for issues, then swapped into the production area. Cute.
+* **Service-level agreements** may be set up, with email scheduling and a Missed SLAs view available for analysis.
+* Trigger rules are a thing.
+* Zombies and undead processes. Oh boy!
+  * On UNIX a **zombie process** is one that has completed execution, yet still has an entry in the process table.
+  * In Airflow zombie processes occur when the task instance has completed (and hence no longer emits a heartbeat), but still has a "Running" populated in the metadata store.
+     * This typically occurs due to network partitions or ungraceful shutdowns. 
+     * The scheduler periodically performs zombie strike-downs as part of its normal operations. 
+  * Undead processes have a heartbeat but no entry in the metadata store (this is akin to an orphan process in UNIX).
+     * Undead processes can happen due to scheduler restarts and related faults?
+     * The task instance will get a "wut" ack from the scheduler when it goes to register a heartbeat, and will know to stop.
+* Question: what happens if a task heartbeats the scheduler, but times out?
+* A **cluster policy** can be set that conforms DAGs and tasks to desired "admin-set" properties (TODO: dive into what you can control with these properties).
+* You can attach documentation to your tasks using special `doc_md` (and friends) attributes. These will be rendered in the UI.
+* Jinja templating may be used to parametrize operators in the file definition.
+  * The templates will be evaluated at runtime.
+  * This is just a convenient, for certain use cases, alternative to specifying things using raw Python.
+  * Particularly Jinja macros can be very useful.
+
 ### Data profiling
-* Still need to figure this out.
-* https://airflow.apache.org/profiling.html
+* Airflow includes a data profiling page. This allows you to write SQL queries, download CSVs from SQL queries, and draw graphs on-screen. Just like a SQL Explorer.
+* Cute. Description: https://airflow.apache.org/profiling.html.
 
 
-### Admin
-
-* TODO
+### Scheduling and triggers
+* Tasks that are scheduled are run at the end of the `schedule_interval` wait period, not before.
+* Airflow makes no guarantees as to exactness of a run time. Tasks are scheduled "soon" after their designated time, but never before.
+* `schedule_interval` may be either a chron expression or a timedelta object.
+* By default all DAG runs in the past that have not been run yet will be scheduled. This is known as a **catchup**.
+* You can turn this behavior off obviously.
+* It's also possible to run a DAG within a specified time interval manually. This is a **backfill** (particularly useful when developing).
+* You can also run a `trigger_dag` on either the CLI or through the UI. The run's timestamp is the trigger timestamp.
+* How do you unblock tasks?
+  * You can clear runs from the UI. Removing them from the history in this way will cause a catchup to run on them, if applicable.
+  * You can also this via `airflow clear -h` in the UI.
+  * Clearing a task instance doesn't delete the old task information. Instead it raises `max_tries` by one, and sets the current task instance state to `None`.
+  * You can manually mark a task instance as a success via the UI. This can be used to fix false negatives and such.
